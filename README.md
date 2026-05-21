@@ -1,0 +1,99 @@
+# HolderConnect
+
+HolderConnect is a Node.js webapp for finding wallets that hold NFTs from every collection you enter. It supports 1 to 5 NFT contract addresses, optional collection labels, chain selection, Alchemy NFT API pagination, CSV export, and clipboard copy.
+
+## Stack
+
+- Node.js and Express backend
+- React and Vite frontend
+- Alchemy NFT API holder lookup
+- ethers.js contract address validation
+- Railway-ready production server
+
+## Local Install
+
+```bash
+npm install
+```
+
+Create a local environment file:
+
+```bash
+cp .env.example .env
+```
+
+Set your Alchemy key in `.env`:
+
+```bash
+ALCHEMY_API_KEY=your_alchemy_api_key
+PORT=3000
+```
+
+PowerShell users can set variables for the current terminal instead:
+
+```powershell
+$env:ALCHEMY_API_KEY="your_alchemy_api_key"
+$env:PORT="3000"
+```
+
+## Run Locally
+
+Start the API and Vite dev server:
+
+```bash
+npm run dev
+```
+
+Open the Vite URL shown in the terminal, usually:
+
+```text
+http://localhost:5173
+```
+
+Build and run the production server locally:
+
+```bash
+npm run build
+npm start
+```
+
+Then open:
+
+```text
+http://localhost:3000
+```
+
+## Railway Deployment
+
+1. Push this repository to GitHub.
+2. Create a new Railway project from the GitHub repository.
+3. Add the environment variable `ALCHEMY_API_KEY` in Railway.
+4. Railway provides `PORT` automatically. Do not hardcode it.
+5. Use the default build and start flow:
+   - Build command: `npm run build`
+   - Start command: `npm start`
+6. Open Railway project settings and enable Public Networking.
+7. Use the generated Railway Public Networking Domain to access HolderConnect.
+
+The server binds to `process.env.PORT`, which is required for Railway.
+
+## How It Works
+
+1. The frontend sends the selected chain and entered contracts to `/api/check-holders`.
+2. The backend validates each contract with `ethers.isAddress`.
+3. Holder data is fetched from Alchemy's `getOwnersForContract` NFT API endpoint.
+4. Pagination continues until Alchemy stops returning a `pageKey`.
+5. Owner addresses are normalized to lowercase and deduplicated per contract.
+6. Wallets are intersected across every contract holder set.
+7. With one contract, all holders of that contract are returned.
+
+## Environment Variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `ALCHEMY_API_KEY` | Yes | Alchemy API key used for NFT holder requests. |
+| `PORT` | No locally, yes on Railway | Port for the Express server. Railway sets this automatically. |
+
+## Error Handling
+
+HolderConnect returns clear errors for invalid contract addresses, missing API configuration, unsupported chains, failed Alchemy API calls, empty results, unexpected API responses, and rate limits.

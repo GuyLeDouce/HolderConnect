@@ -1,0 +1,29 @@
+{
+  "name": "holderconnect",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Find wallets that hold NFTs across multiple collections.",
+  "scripts": {
+    "dev": "concurrently \"node --watch server.js\" \"vite --host 0.0.0.0\"",
+    "build": "vite build",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ethers": "^6.13.4",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
