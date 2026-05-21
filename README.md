@@ -1,6 +1,6 @@
 # HolderConnect
 
-HolderConnect is a Node.js webapp for finding wallets that hold NFTs from every collection you enter. It supports 1 to 5 NFT contract addresses, optional collection labels, chain selection, Alchemy NFT API pagination, CSV export, and clipboard copy.
+HolderConnect is a Node.js webapp for finding wallets that hold NFTs from every collection you enter. It supports 1 to 5 NFT contract addresses, optional collection labels, per-collection chain selection, Alchemy NFT API pagination, CSV export, and clipboard copy.
 
 ## Stack
 
@@ -79,13 +79,19 @@ The server binds to `process.env.PORT`, which is required for Railway.
 
 ## How It Works
 
-1. The frontend sends the selected chain and entered contracts to `/api/check-holders`.
+1. The frontend sends each entered contract, label, and chain to `/api/check-holders`.
 2. The backend validates each contract with `ethers.isAddress`.
 3. Holder data is fetched from Alchemy's `getOwnersForContract` NFT API endpoint.
 4. Pagination continues until Alchemy stops returning a `pageKey`.
 5. Owner addresses are normalized to lowercase and deduplicated per contract.
 6. Wallets are intersected across every contract holder set.
 7. With one contract, all holders of that contract are returned.
+
+## Chain Support
+
+Each contract row has its own chain selector, so a check can compare collections across Ethereum mainnet and L2 networks in the same run.
+
+Built-in options include Ethereum, Polygon, Arbitrum, Optimism, Base, Blast, Linea, Scroll, Unichain, World Chain, and ZKsync Era. The custom option accepts an Alchemy network id such as `zora-mainnet`; it will work when that network supports Alchemy's NFT API.
 
 ## Environment Variables
 

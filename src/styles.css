@@ -182,7 +182,7 @@ input:focus {
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(210px, 1fr) minmax(150px, 0.5fr) 42px;
+  grid-template-columns: minmax(210px, 1fr) minmax(140px, 0.45fr) minmax(170px, 0.55fr) 42px;
 }
 
 .field {
@@ -198,8 +198,13 @@ input:focus {
 
 .icon-button {
   font-size: 1.35rem;
+  grid-column: 4;
   padding: 0;
   width: 42px;
+}
+
+.custom-network-field {
+  grid-column: 3 / 4;
 }
 
 .actions,
@@ -355,7 +360,9 @@ th:first-child {
   }
 
   .address-field,
-  .label-field {
+  .label-field,
+  .chain-field,
+  .custom-network-field {
     grid-column: 1 / -1;
   }
 

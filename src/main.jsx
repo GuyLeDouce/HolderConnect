@@ -8,11 +8,18 @@ const CHAINS = [
   { key: 'polygon', label: 'Polygon Mainnet' },
   { key: 'arbitrum', label: 'Arbitrum One' },
   { key: 'optimism', label: 'Optimism Mainnet' },
-  { key: 'base', label: 'Base Mainnet' }
+  { key: 'base', label: 'Base Mainnet' },
+  { key: 'blast', label: 'Blast Mainnet' },
+  { key: 'linea', label: 'Linea Mainnet' },
+  { key: 'scroll', label: 'Scroll Mainnet' },
+  { key: 'unichain', label: 'Unichain Mainnet' },
+  { key: 'worldchain', label: 'World Chain Mainnet' },
+  { key: 'zksync', label: 'ZKsync Era Mainnet' },
+  { key: 'custom', label: 'Custom Alchemy network' }
 ];
 
 function emptyContract() {
-  return { address: '', label: '' };
+  return { address: '', label: '', chain: 'eth', customNetwork: '' };
 }
 
 function toCsv(wallets) {
@@ -30,7 +37,6 @@ function downloadCsv(wallets) {
 }
 
 function App() {
-  const [chain, setChain] = useState('eth');
   const [contracts, setContracts] = useState([emptyContract()]);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -79,7 +85,6 @@ function App() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          chain,
           contracts: activeContracts
         })
       });
@@ -126,18 +131,8 @@ function App() {
           <div className="form-header">
             <div>
               <h2>Collections</h2>
-              <p>Enter contract addresses and optional labels.</p>
+              <p>Enter contract addresses, labels, and the chain for each collection.</p>
             </div>
-            <label>
-              Chain
-              <select value={chain} onChange={(event) => setChain(event.target.value)}>
-                {CHAINS.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
 
           <div className="contract-list">
@@ -162,6 +157,34 @@ function App() {
                     placeholder={`Collection ${index + 1}`}
                   />
                 </div>
+                <div className="field chain-field">
+                  <label htmlFor={`chain-${index}`}>Chain</label>
+                  <select
+                    id={`chain-${index}`}
+                    value={contract.chain}
+                    onChange={(event) => updateContract(index, 'chain', event.target.value)}
+                  >
+                    {CHAINS.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {contract.chain === 'custom' && (
+                  <div className="field custom-network-field">
+                    <label htmlFor={`custom-network-${index}`}>Alchemy network id</label>
+                    <input
+                      id={`custom-network-${index}`}
+                      value={contract.customNetwork}
+                      onChange={(event) =>
+                        updateContract(index, 'customNetwork', event.target.value)
+                      }
+                      placeholder="zora-mainnet"
+                      spellCheck="false"
+                    />
+                  </div>
+                )}
                 <button
                   className="icon-button"
                   type="button"
@@ -203,7 +226,7 @@ function App() {
           <div className="results-header">
             <div>
               <h2>Results</h2>
-              <p>{result ? result.chain.label : 'Run a check to see holder overlap.'}</p>
+              <p>{result ? 'Holder overlap across selected chains.' : 'Run a check to see holder overlap.'}</p>
             </div>
             <div className="result-actions">
               <button type="button" onClick={copyWallets} disabled={!result?.wallets?.length}>
@@ -226,6 +249,7 @@ function App() {
                   <div className="metric" key={contract.address}>
                     <span>{contract.label}</span>
                     <strong>{contract.holderCount.toLocaleString()}</strong>
+                    <small>{contract.chain.label}</small>
                     <small>{contract.address}</small>
                   </div>
                 ))}

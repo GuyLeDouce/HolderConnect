@@ -18,8 +18,17 @@ const CHAIN_CONFIG = {
   polygon: { label: 'Polygon Mainnet', network: 'polygon-mainnet' },
   arbitrum: { label: 'Arbitrum One', network: 'arb-mainnet' },
   optimism: { label: 'Optimism Mainnet', network: 'opt-mainnet' },
-  base: { label: 'Base Mainnet', network: 'base-mainnet' }
+  base: { label: 'Base Mainnet', network: 'base-mainnet' },
+  blast: { label: 'Blast Mainnet', network: 'blast-mainnet' },
+  linea: { label: 'Linea Mainnet', network: 'linea-mainnet' },
+  scroll: { label: 'Scroll Mainnet', network: 'scroll-mainnet' },
+  unichain: { label: 'Unichain Mainnet', network: 'unichain-mainnet' },
+  worldchain: { label: 'World Chain Mainnet', network: 'worldchain-mainnet' },
+  zksync: { label: 'ZKsync Era Mainnet', network: 'zksync-mainnet' }
 };
+
+const CUSTOM_CHAIN_KEY = 'custom';
+const ALCHEMY_NETWORK_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 app.use(
   helmet({
@@ -39,7 +48,10 @@ function normalizeContracts(input) {
   const contracts = input
     .map((item) => ({
       address: typeof item?.address === 'string' ? item.address.trim() : '',
-      label: typeof item?.label === 'string' ? item.label.trim() : ''
+      label: typeof item?.label === 'string' ? item.label.trim() : '',
+      chain: typeof item?.chain === 'string' ? item.chain.trim() : 'eth',
+      customNetwork:
+        typeof item?.customNetwork === 'string' ? item.customNetwork.trim().toLowerCase() : ''
     }))
     .filter((item) => item.address.length > 0);
 
@@ -65,12 +77,31 @@ function normalizeContracts(input) {
 
   return contracts.map((contract, index) => ({
     address: contract.address.toLowerCase(),
-    label: contract.label || `Collection ${index + 1}`
+    label: contract.label || `Collection ${index + 1}`,
+    chain: getChain(contract.chain, contract.customNetwork)
   }));
 }
 
-function getChain(chain) {
+function getChain(chain, customNetwork = '') {
   const chainKey = typeof chain === 'string' ? chain : 'eth';
+
+  if (chainKey === CUSTOM_CHAIN_KEY) {
+    if (!ALCHEMY_NETWORK_PATTERN.test(customNetwork)) {
+      const error = new Error(
+        'Custom Alchemy network must use a hostname-safe network id, for example zora-mainnet.'
+      );
+      error.status = 400;
+      throw error;
+    }
+
+    return {
+      key: CUSTOM_CHAIN_KEY,
+      label: customNetwork,
+      network: customNetwork,
+      isCustom: true
+    };
+  }
+
   if (!CHAIN_CONFIG[chainKey]) {
     const error = new Error('Unsupported chain selected.');
     error.status = 400;
@@ -173,7 +204,6 @@ app.post('/api/check-holders', async (req, res, next) => {
       throw error;
     }
 
-    const chain = getChain(req.body?.chain);
     const contracts = normalizeContracts(req.body?.contracts);
 
     const contractResults = [];
@@ -182,13 +212,19 @@ app.post('/api/check-holders', async (req, res, next) => {
     for (const contract of contracts) {
       const result = await fetchContractOwners({
         apiKey,
-        network: chain.network,
+        network: contract.chain.network,
         address: contract.address
       });
 
       contractResults.push({
         address: contract.address,
         label: contract.label,
+        chain: {
+          key: contract.chain.key,
+          label: contract.chain.label,
+          network: contract.chain.network,
+          isCustom: contract.chain.isCustom || false
+        },
         holderCount: result.owners.size,
         pagesFetched: result.pageCount
       });
@@ -198,10 +234,6 @@ app.post('/api/check-holders', async (req, res, next) => {
     const sharedWallets = intersectOwnerSets(ownerSets);
 
     res.json({
-      chain: {
-        key: chain.key,
-        label: chain.label
-      },
       contracts: contractResults,
       sharedHolderCount: sharedWallets.length,
       wallets: sharedWallets,
