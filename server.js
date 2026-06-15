@@ -4,7 +4,7 @@ import morgan from 'morgan';
 import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isAddress } from 'ethers';
+import { formatUnits, isAddress } from 'ethers';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +29,16 @@ const CHAIN_CONFIG = {
 
 const CUSTOM_CHAIN_KEY = 'custom';
 const ALCHEMY_NETWORK_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MATCH_MODES = new Set(['common', 'uncommon']);
+const OPENSEA_CHAIN_BY_ALCHEMY_KEY = {
+  eth: 'ethereum',
+  polygon: 'polygon',
+  arbitrum: 'arbitrum',
+  optimism: 'optimism',
+  base: 'base',
+  blast: 'blast',
+  unichain: 'unichain'
+};
 
 app.use(
   helmet({
@@ -51,7 +61,8 @@ function normalizeContracts(input) {
       label: typeof item?.label === 'string' ? item.label.trim() : '',
       chain: typeof item?.chain === 'string' ? item.chain.trim() : 'eth',
       customNetwork:
-        typeof item?.customNetwork === 'string' ? item.customNetwork.trim().toLowerCase() : ''
+        typeof item?.customNetwork === 'string' ? item.customNetwork.trim().toLowerCase() : '',
+      minListingPriceEth: normalizeMinListingPriceEth(item?.minListingPriceEth)
     }))
     .filter((item) => item.address.length > 0);
 
@@ -78,8 +89,35 @@ function normalizeContracts(input) {
   return contracts.map((contract, index) => ({
     address: contract.address.toLowerCase(),
     label: contract.label || `Collection ${index + 1}`,
-    chain: getChain(contract.chain, contract.customNetwork)
+    chain: getChain(contract.chain, contract.customNetwork),
+    minListingPriceEth: contract.minListingPriceEth
   }));
+}
+
+function normalizeMinListingPriceEth(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    const error = new Error('Minimum listing price must be a positive ETH value.');
+    error.status = 400;
+    throw error;
+  }
+
+  return parsed;
+}
+
+function normalizeMatchMode(input) {
+  const mode = typeof input === 'string' ? input : 'common';
+  if (!MATCH_MODES.has(mode)) {
+    const error = new Error('Unsupported holder match mode.');
+    error.status = 400;
+    throw error;
+  }
+
+  return mode;
 }
 
 function getChain(chain, customNetwork = '') {
@@ -127,15 +165,16 @@ function alchemyErrorMessage(status, body) {
   return `Alchemy request failed with status ${status}.`;
 }
 
-async function fetchContractOwners({ apiKey, network, address }) {
+async function fetchContractOwners({ apiKey, network, address, includeTokenBalances = false }) {
   const owners = new Set();
+  const ownerTokens = new Map();
   let pageKey;
   let pageCount = 0;
 
   do {
     const url = new URL(`https://${network}.g.alchemy.com/nft/v3/${apiKey}/getOwnersForContract`);
     url.searchParams.set('contractAddress', address);
-    url.searchParams.set('withTokenBalances', 'false');
+    url.searchParams.set('withTokenBalances', includeTokenBalances ? 'true' : 'false');
     if (pageKey) {
       url.searchParams.set('pageKey', pageKey);
     }
@@ -159,6 +198,32 @@ async function fetchContractOwners({ apiKey, network, address }) {
     for (const owner of body.owners) {
       if (typeof owner === 'string' && isAddress(owner)) {
         owners.add(owner.toLowerCase());
+        continue;
+      }
+
+      const ownerAddress =
+        typeof owner?.ownerAddress === 'string'
+          ? owner.ownerAddress
+          : typeof owner?.owner === 'string'
+            ? owner.owner
+            : '';
+
+      if (!isAddress(ownerAddress)) {
+        continue;
+      }
+
+      const normalizedOwner = ownerAddress.toLowerCase();
+      owners.add(normalizedOwner);
+
+      if (includeTokenBalances && Array.isArray(owner.tokenBalances)) {
+        const tokens = ownerTokens.get(normalizedOwner) || new Set();
+        for (const tokenBalance of owner.tokenBalances) {
+          const tokenId = normalizeTokenId(tokenBalance?.tokenId);
+          if (tokenId && isPositiveTokenBalance(tokenBalance?.balance)) {
+            tokens.add(tokenId);
+          }
+        }
+        ownerTokens.set(normalizedOwner, tokens);
       }
     }
 
@@ -168,8 +233,33 @@ async function fetchContractOwners({ apiKey, network, address }) {
 
   return {
     owners,
+    ownerTokens,
     pageCount
   };
+}
+
+function normalizeTokenId(tokenId) {
+  if (typeof tokenId !== 'string' && typeof tokenId !== 'number' && typeof tokenId !== 'bigint') {
+    return '';
+  }
+
+  try {
+    return BigInt(tokenId).toString();
+  } catch (_error) {
+    return String(tokenId);
+  }
+}
+
+function isPositiveTokenBalance(balance) {
+  if (balance === undefined || balance === null) {
+    return true;
+  }
+
+  try {
+    return BigInt(balance) > 0n;
+  } catch (_error) {
+    return Number(balance) > 0;
+  }
 }
 
 function intersectOwnerSets(ownerSets) {
@@ -179,6 +269,232 @@ function intersectOwnerSets(ownerSets) {
 
   const [smallestSet] = [...ownerSets].sort((a, b) => a.size - b.size);
   return [...smallestSet].filter((wallet) => ownerSets.every((set) => set.has(wallet))).sort();
+}
+
+function getMatchingWallets(ownerSets, mode) {
+  if (mode === 'uncommon') {
+    return uncommonOwnerSets(ownerSets);
+  }
+
+  return intersectOwnerSets(ownerSets);
+}
+
+function uncommonOwnerSets(ownerSets) {
+  if (ownerSets.length <= 1) {
+    return [];
+  }
+
+  const commonWallets = new Set(intersectOwnerSets(ownerSets));
+  const uncommonWallets = new Set();
+  for (const ownerSet of ownerSets) {
+    for (const wallet of ownerSet) {
+      if (!commonWallets.has(wallet)) {
+        uncommonWallets.add(wallet);
+      }
+    }
+  }
+
+  return [...uncommonWallets].sort();
+}
+
+function getOpenSeaChain(contract) {
+  if (contract.chain.isCustom || !OPENSEA_CHAIN_BY_ALCHEMY_KEY[contract.chain.key]) {
+    const error = new Error(
+      `${contract.label} uses a chain that is not supported by the listing price filter.`
+    );
+    error.status = 400;
+    throw error;
+  }
+
+  return OPENSEA_CHAIN_BY_ALCHEMY_KEY[contract.chain.key];
+}
+
+async function filterOwnersByListingFloor({ contract, owners, ownerTokens, openSeaApiKey }) {
+  if (contract.minListingPriceEth === null) {
+    return {
+      owners,
+      filteredOutCount: 0,
+      underFloorListingCount: 0
+    };
+  }
+
+  if (!openSeaApiKey) {
+    const error = new Error(
+      'Missing OPENSEA_API_KEY environment variable. It is required for listing price filters.'
+    );
+    error.status = 500;
+    throw error;
+  }
+
+  const underFloorTokenIds = await fetchUnderFloorListings({
+    apiKey: openSeaApiKey,
+    chain: getOpenSeaChain(contract),
+    address: contract.address,
+    minListingPriceEth: contract.minListingPriceEth
+  });
+
+  if (underFloorTokenIds.size === 0) {
+    return {
+      owners,
+      filteredOutCount: 0,
+      underFloorListingCount: 0
+    };
+  }
+
+  const eligibleOwners = new Set();
+  let filteredOutCount = 0;
+
+  for (const owner of owners) {
+    const tokens = ownerTokens.get(owner) || new Set();
+    const hasUnderFloorListing = [...tokens].some((tokenId) => underFloorTokenIds.has(tokenId));
+    if (hasUnderFloorListing) {
+      filteredOutCount += 1;
+    } else {
+      eligibleOwners.add(owner);
+    }
+  }
+
+  return {
+    owners: eligibleOwners,
+    filteredOutCount,
+    underFloorListingCount: underFloorTokenIds.size
+  };
+}
+
+async function fetchUnderFloorListings({ apiKey, chain, address, minListingPriceEth }) {
+  const tokenIds = new Set();
+  let cursor;
+  let shouldContinue = true;
+
+  while (shouldContinue) {
+    const url = new URL(`https://api.opensea.io/api/v2/orders/${chain}/seaport/listings`);
+    url.searchParams.set('asset_contract_address', address);
+    url.searchParams.set('order_by', 'price');
+    url.searchParams.set('order_direction', 'asc');
+    url.searchParams.set('limit', '200');
+    if (cursor) {
+      url.searchParams.set('cursor', cursor);
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+        'x-api-key': apiKey
+      }
+    });
+    const contentType = response.headers.get('content-type') || '';
+    const body = contentType.includes('application/json') ? await response.json() : await response.text();
+
+    if (!response.ok) {
+      const error = new Error(openSeaErrorMessage(response.status, body));
+      error.status = response.status === 429 ? 429 : 502;
+      throw error;
+    }
+
+    const orders = Array.isArray(body?.orders)
+      ? body.orders
+      : Array.isArray(body?.listings)
+        ? body.listings
+        : [];
+
+    if (orders.length === 0) {
+      break;
+    }
+
+    for (const order of orders) {
+      const priceEth = extractEthPrice(order);
+      if (priceEth === null) {
+        continue;
+      }
+
+      if (priceEth >= minListingPriceEth) {
+        shouldContinue = false;
+        break;
+      }
+
+      const tokenId = extractListingTokenId(order);
+      if (tokenId) {
+        tokenIds.add(tokenId);
+      }
+    }
+
+    cursor = body?.next || body?.next_cursor || body?.cursor?.next;
+    if (!cursor) {
+      break;
+    }
+  }
+
+  return tokenIds;
+}
+
+function openSeaErrorMessage(status, body) {
+  if (status === 429) {
+    return 'OpenSea rate limit reached while checking listings. Wait a moment and try again.';
+  }
+
+  if (body?.errors?.length) {
+    return body.errors.join(' ');
+  }
+
+  if (body?.detail) {
+    return body.detail;
+  }
+
+  if (body?.message) {
+    return body.message;
+  }
+
+  return `OpenSea listing request failed with status ${status}.`;
+}
+
+function extractEthPrice(order) {
+  const token = order?.payment_token_contract || order?.price?.current?.currency || {};
+  const symbol = typeof token?.symbol === 'string' ? token.symbol.toUpperCase() : '';
+  if (symbol && !['ETH', 'WETH'].includes(symbol)) {
+    return null;
+  }
+
+  const rawValue =
+    order?.current_price ??
+    order?.price?.current?.value ??
+    order?.price?.value ??
+    order?.protocol_data?.parameters?.consideration?.[0]?.startAmount;
+
+  if (rawValue === undefined || rawValue === null) {
+    return null;
+  }
+
+  const value = String(rawValue);
+  if (value.includes('.')) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const decimals = Number(token?.decimals ?? order?.price?.current?.decimals ?? 18);
+  try {
+    return Number(formatUnits(BigInt(value), Number.isFinite(decimals) ? decimals : 18));
+  } catch (_error) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+}
+
+function extractListingTokenId(order) {
+  const candidates = [
+    order?.maker_asset_bundle?.assets?.[0]?.token_id,
+    order?.asset?.token_id,
+    order?.nft?.identifier,
+    order?.protocol_data?.parameters?.offer?.[0]?.identifierOrCriteria
+  ];
+
+  for (const candidate of candidates) {
+    const tokenId = normalizeTokenId(candidate);
+    if (tokenId) {
+      return tokenId;
+    }
+  }
+
+  return '';
 }
 
 app.get('/api/health', (_req, res) => {
@@ -205,6 +521,8 @@ app.post('/api/check-holders', async (req, res, next) => {
     }
 
     const contracts = normalizeContracts(req.body?.contracts);
+    const matchMode = normalizeMatchMode(req.body?.matchMode);
+    const openSeaApiKey = process.env.OPENSEA_API_KEY;
 
     const contractResults = [];
     const ownerSets = [];
@@ -213,7 +531,15 @@ app.post('/api/check-holders', async (req, res, next) => {
       const result = await fetchContractOwners({
         apiKey,
         network: contract.chain.network,
-        address: contract.address
+        address: contract.address,
+        includeTokenBalances: contract.minListingPriceEth !== null
+      });
+
+      const filteredResult = await filterOwnersByListingFloor({
+        contract,
+        owners: result.owners,
+        ownerTokens: result.ownerTokens,
+        openSeaApiKey
       });
 
       contractResults.push({
@@ -226,17 +552,23 @@ app.post('/api/check-holders', async (req, res, next) => {
           isCustom: contract.chain.isCustom || false
         },
         holderCount: result.owners.size,
+        eligibleHolderCount: filteredResult.owners.size,
+        filteredOutListingCount: filteredResult.filteredOutCount,
+        underFloorListingCount: filteredResult.underFloorListingCount,
+        minListingPriceEth: contract.minListingPriceEth,
         pagesFetched: result.pageCount
       });
-      ownerSets.push(result.owners);
+      ownerSets.push(filteredResult.owners);
     }
 
-    const sharedWallets = intersectOwnerSets(ownerSets);
+    const matchedWallets = getMatchingWallets(ownerSets, matchMode);
 
     res.json({
       contracts: contractResults,
-      sharedHolderCount: sharedWallets.length,
-      wallets: sharedWallets,
+      resultMode: matchMode,
+      sharedHolderCount: matchedWallets.length,
+      matchHolderCount: matchedWallets.length,
+      wallets: matchedWallets,
       generatedAt: new Date().toISOString()
     });
   } catch (error) {

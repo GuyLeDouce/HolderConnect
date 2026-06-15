@@ -1,6 +1,6 @@
 # HolderConnect
 
-HolderConnect is a Node.js webapp for finding wallets that hold NFTs from every collection you enter. It supports 1 to 5 NFT contract addresses, optional collection labels, per-collection chain selection, Alchemy NFT API pagination, CSV export, and clipboard copy.
+HolderConnect is a Node.js webapp for finding wallets that hold NFTs from every collection you enter. It supports 1 to 5 NFT contract addresses, optional collection labels, per-collection chain selection, common or uncommon holder matching, optional listing floor filters, Alchemy NFT API pagination, CSV export, and clipboard copy.
 
 ## Stack
 
@@ -26,13 +26,17 @@ Set your Alchemy key in `.env`:
 
 ```bash
 ALCHEMY_API_KEY=your_alchemy_api_key
+OPENSEA_API_KEY=your_opensea_api_key
 PORT=3000
 ```
+
+`OPENSEA_API_KEY` is only required when you use the optional minimum listing ETH filter.
 
 PowerShell users can set variables for the current terminal instead:
 
 ```powershell
 $env:ALCHEMY_API_KEY="your_alchemy_api_key"
+$env:OPENSEA_API_KEY="your_opensea_api_key"
 $env:PORT="3000"
 ```
 
@@ -84,8 +88,9 @@ The server binds to `process.env.PORT`, which is required for Railway.
 3. Holder data is fetched from Alchemy's `getOwnersForContract` NFT API endpoint.
 4. Pagination continues until Alchemy stops returning a `pageKey`.
 5. Owner addresses are normalized to lowercase and deduplicated per contract.
-6. Wallets are intersected across every contract holder set.
-7. With one contract, all holders of that contract are returned.
+6. If a minimum listing ETH value is entered for a contract, OpenSea listings below that value are used to remove owners with under-floor listed tokens from that contract's eligible holder set. Owners with no listings, or only listings at or above the value, remain eligible.
+7. In common mode, wallets are intersected across every eligible contract holder set.
+8. In uncommon mode, the app returns wallets found in at least one eligible holder set but not every eligible holder set.
 
 ## Chain Support
 
@@ -98,6 +103,7 @@ Built-in options include Ethereum, Polygon, Arbitrum, Optimism, Base, Blast, Lin
 | Variable | Required | Description |
 | --- | --- | --- |
 | `ALCHEMY_API_KEY` | Yes | Alchemy API key used for NFT holder requests. |
+| `OPENSEA_API_KEY` | Only for listing filters | OpenSea API key used to check active listings below a per-contract ETH threshold. |
 | `PORT` | No locally, yes on Railway | Port for the Express server. Railway sets this automatically. |
 
 ## Error Handling

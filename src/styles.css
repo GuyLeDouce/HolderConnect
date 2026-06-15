@@ -178,11 +178,47 @@ input:focus {
   gap: 12px;
 }
 
+.mode-control {
+  background: #f7f9fc;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+  padding: 4px;
+}
+
+.mode-control label {
+  align-items: center;
+  border-radius: 6px;
+  color: #445064;
+  cursor: pointer;
+  display: flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 38px;
+}
+
+.mode-control label.selected {
+  background: #ffffff;
+  color: #116149;
+  box-shadow: 0 1px 3px rgba(23, 32, 51, 0.12);
+}
+
+.mode-control input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
 .contract-row {
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(210px, 1fr) minmax(140px, 0.45fr) minmax(170px, 0.55fr) 42px;
+  grid-template-columns:
+    minmax(190px, 1fr) minmax(120px, 0.4fr) minmax(150px, 0.5fr) minmax(120px, 0.35fr)
+    42px;
 }
 
 .field {
@@ -198,13 +234,13 @@ input:focus {
 
 .icon-button {
   font-size: 1.35rem;
-  grid-column: 4;
+  grid-column: 5;
   padding: 0;
   width: 42px;
 }
 
 .custom-network-field {
-  grid-column: 3 / 4;
+  grid-column: 3 / 5;
 }
 
 .actions,
@@ -362,6 +398,7 @@ th:first-child {
   .address-field,
   .label-field,
   .chain-field,
+  .floor-field,
   .custom-network-field {
     grid-column: 1 / -1;
   }

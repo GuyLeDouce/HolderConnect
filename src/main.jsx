@@ -3,6 +3,20 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 
 const MAX_CONTRACTS = 5;
+const RESULT_MODE_LABELS = {
+  common: {
+    action: 'Find shared holders',
+    empty: 'No shared holders found.',
+    metric: 'Shared holders',
+    summary: 'Wallets present in every selected collection'
+  },
+  uncommon: {
+    action: 'Find uncommon holders',
+    empty: 'No uncommon holders found.',
+    metric: 'Uncommon holders',
+    summary: 'Wallets present in at least one collection, but not every selected collection'
+  }
+};
 const CHAINS = [
   { key: 'eth', label: 'Ethereum Mainnet' },
   { key: 'polygon', label: 'Polygon Mainnet' },
@@ -19,25 +33,26 @@ const CHAINS = [
 ];
 
 function emptyContract() {
-  return { address: '', label: '', chain: 'eth', customNetwork: '' };
+  return { address: '', label: '', chain: 'eth', customNetwork: '', minListingPriceEth: '' };
 }
 
 function toCsv(wallets) {
   return ['wallet', ...wallets].join('\n');
 }
 
-function downloadCsv(wallets) {
+function downloadCsv(wallets, resultMode) {
   const blob = new Blob([toCsv(wallets)], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = 'holderconnect-shared-wallets.csv';
+  anchor.download = `holderconnect-${resultMode || 'common'}-wallets.csv`;
   anchor.click();
   URL.revokeObjectURL(url);
 }
 
 function App() {
   const [contracts, setContracts] = useState([emptyContract()]);
+  const [matchMode, setMatchMode] = useState('common');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -49,6 +64,7 @@ function App() {
   );
 
   const canSubmit = activeContracts.length > 0 && !isLoading;
+  const modeLabels = RESULT_MODE_LABELS[result?.resultMode || matchMode] || RESULT_MODE_LABELS.common;
 
   function updateContract(index, field, value) {
     setContracts((current) =>
@@ -85,7 +101,8 @@ function App() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          contracts: activeContracts
+          contracts: activeContracts,
+          matchMode
         })
       });
 
@@ -131,8 +148,31 @@ function App() {
           <div className="form-header">
             <div>
               <h2>Collections</h2>
-              <p>Enter contract addresses, labels, and the chain for each collection.</p>
+              <p>Enter contract addresses, labels, chain, and optional listing filters.</p>
             </div>
+          </div>
+
+          <div className="mode-control" role="radiogroup" aria-label="Holder match mode">
+            <label className={matchMode === 'common' ? 'selected' : ''}>
+              <input
+                type="radio"
+                name="match-mode"
+                value="common"
+                checked={matchMode === 'common'}
+                onChange={(event) => setMatchMode(event.target.value)}
+              />
+              Common
+            </label>
+            <label className={matchMode === 'uncommon' ? 'selected' : ''}>
+              <input
+                type="radio"
+                name="match-mode"
+                value="uncommon"
+                checked={matchMode === 'uncommon'}
+                onChange={(event) => setMatchMode(event.target.value)}
+              />
+              Uncommon
+            </label>
           </div>
 
           <div className="contract-list">
@@ -171,6 +211,20 @@ function App() {
                     ))}
                   </select>
                 </div>
+                <div className="field floor-field">
+                  <label htmlFor={`floor-${index}`}>Min listing ETH</label>
+                  <input
+                    id={`floor-${index}`}
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value={contract.minListingPriceEth}
+                    onChange={(event) =>
+                      updateContract(index, 'minListingPriceEth', event.target.value)
+                    }
+                    placeholder="Optional"
+                  />
+                </div>
                 {contract.chain === 'custom' && (
                   <div className="field custom-network-field">
                     <label htmlFor={`custom-network-${index}`}>Alchemy network id</label>
@@ -204,7 +258,7 @@ function App() {
               Add contract
             </button>
             <button className="primary" type="submit" disabled={!canSubmit}>
-              {isLoading ? 'Checking holders...' : 'Find shared holders'}
+              {isLoading ? 'Checking holders...' : modeLabels.action}
             </button>
           </div>
 
@@ -226,7 +280,11 @@ function App() {
           <div className="results-header">
             <div>
               <h2>Results</h2>
-              <p>{result ? 'Holder overlap across selected chains.' : 'Run a check to see holder overlap.'}</p>
+              <p>
+                {result
+                  ? 'Holder results across selected chains.'
+                  : 'Run a check to see matching wallet addresses.'}
+              </p>
             </div>
             <div className="result-actions">
               <button type="button" onClick={copyWallets} disabled={!result?.wallets?.length}>
@@ -234,7 +292,7 @@ function App() {
               </button>
               <button
                 type="button"
-                onClick={() => downloadCsv(result.wallets)}
+                onClick={() => downloadCsv(result.wallets, result.resultMode)}
                 disabled={!result?.wallets?.length}
               >
                 Download CSV
@@ -248,15 +306,24 @@ function App() {
                 {result.contracts.map((contract) => (
                   <div className="metric" key={contract.address}>
                     <span>{contract.label}</span>
-                    <strong>{contract.holderCount.toLocaleString()}</strong>
+                    <strong>
+                      {(contract.eligibleHolderCount ?? contract.holderCount).toLocaleString()}
+                    </strong>
                     <small>{contract.chain.label}</small>
+                    {contract.minListingPriceEth !== null && (
+                      <small>
+                        {contract.filteredOutListingCount.toLocaleString()} holder
+                        {contract.filteredOutListingCount === 1 ? '' : 's'} below{' '}
+                        {contract.minListingPriceEth} ETH removed
+                      </small>
+                    )}
                     <small>{contract.address}</small>
                   </div>
                 ))}
                 <div className="metric shared">
-                  <span>Shared holders</span>
-                  <strong>{result.sharedHolderCount.toLocaleString()}</strong>
-                  <small>Wallets present in every collection</small>
+                  <span>{modeLabels.metric}</span>
+                  <strong>{result.matchHolderCount.toLocaleString()}</strong>
+                  <small>{modeLabels.summary}</small>
                 </div>
               </div>
 
@@ -278,7 +345,7 @@ function App() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="2">No shared holders found.</td>
+                        <td colSpan="2">{modeLabels.empty}</td>
                       </tr>
                     )}
                   </tbody>
