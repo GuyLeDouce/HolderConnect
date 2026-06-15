@@ -90,7 +90,7 @@ The server binds to `process.env.PORT`, which is required for Railway.
 5. Owner addresses are normalized to lowercase and deduplicated per contract.
 6. If a minimum listing ETH value is entered for a contract, OpenSea listings below that value are used to remove owners with under-floor listed tokens from that contract's eligible holder set. Owners with no listings, or only listings at or above the value, remain eligible.
 7. In common mode, wallets are intersected across every eligible contract holder set.
-8. In uncommon mode, the app returns wallets found in at least one eligible holder set but not every eligible holder set.
+8. In uncommon mode, the app returns each wallet once when it appears in at least two eligible holder sets but not every eligible holder set.
 
 ## Chain Support
 

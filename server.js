@@ -284,17 +284,17 @@ function uncommonOwnerSets(ownerSets) {
     return [];
   }
 
-  const commonWallets = new Set(intersectOwnerSets(ownerSets));
-  const uncommonWallets = new Set();
+  const walletContractCounts = new Map();
   for (const ownerSet of ownerSets) {
     for (const wallet of ownerSet) {
-      if (!commonWallets.has(wallet)) {
-        uncommonWallets.add(wallet);
-      }
+      walletContractCounts.set(wallet, (walletContractCounts.get(wallet) || 0) + 1);
     }
   }
 
-  return [...uncommonWallets].sort();
+  return [...walletContractCounts.entries()]
+    .filter(([, contractCount]) => contractCount > 1 && contractCount < ownerSets.length)
+    .map(([wallet]) => wallet)
+    .sort();
 }
 
 function getOpenSeaChain(contract) {

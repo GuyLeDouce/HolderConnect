@@ -14,7 +14,7 @@ const RESULT_MODE_LABELS = {
     action: 'Find uncommon holders',
     empty: 'No uncommon holders found.',
     metric: 'Uncommon holders',
-    summary: 'Wallets present in at least one collection, but not every selected collection'
+    summary: 'Wallets shared by some collections, but not every selected collection'
   }
 };
 const CHAINS = [
