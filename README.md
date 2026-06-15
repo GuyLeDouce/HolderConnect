@@ -1,6 +1,6 @@
 # HolderConnect
 
-HolderConnect is a Node.js webapp for finding wallets that hold NFTs from every collection you enter. It supports 1 to 5 NFT contract addresses, optional collection labels, per-collection chain selection, common or uncommon holder matching, optional listing floor filters, Alchemy NFT API pagination, CSV export, and clipboard copy.
+HolderConnect is a Node.js webapp for finding wallets that hold NFTs from every collection you enter. It supports 1 to 20 NFT contract addresses, optional collection labels, per-collection chain selection, common or uncommon holder matching, optional listing floor filters, Alchemy NFT API pagination, CSV export, and clipboard copy.
 
 ## Stack
 

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
-const MAX_CONTRACTS = 5;
+const MAX_CONTRACTS = 20;
 const RESULT_MODE_LABELS = {
   common: {
     action: 'Find shared holders',
@@ -139,7 +139,7 @@ function App() {
         </div>
         <div className="status-panel">
           <span>Max contracts</span>
-          <strong>5</strong>
+          <strong>{MAX_CONTRACTS}</strong>
         </div>
       </section>
 

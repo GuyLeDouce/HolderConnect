@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MAX_CONTRACTS = 5;
+const MAX_CONTRACTS = 20;
 
 const CHAIN_CONFIG = {
   eth: { label: 'Ethereum Mainnet', network: 'eth-mainnet' },
