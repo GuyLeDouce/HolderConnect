@@ -1,6 +1,6 @@
 # HolderConnect
 
-HolderConnect is a Node.js webapp for finding wallets that hold NFTs from every collection you enter. It supports 1 to 20 NFT contract addresses, optional collection labels, per-collection chain selection, common or uncommon holder matching, optional listing floor filters, Alchemy NFT API pagination, CSV export, and clipboard copy.
+HolderConnect is a Node.js webapp for finding wallets that hold NFTs from the collections you enter. It supports 1 to 20 NFT contract addresses, optional collection labels, per-collection chain selection, common, uncommon, or all holder matching, optional listing floor filters, Alchemy NFT API pagination, CSV export, and clipboard copy.
 
 ## Stack
 
@@ -91,6 +91,7 @@ The server binds to `process.env.PORT`, which is required for Railway.
 6. If a minimum listing ETH value is entered for a contract, OpenSea listings below that value are used to remove owners with under-floor listed tokens from that contract's eligible holder set. Owners with no listings, or only listings at or above the value, remain eligible.
 7. In common mode, wallets are intersected across every eligible contract holder set.
 8. In uncommon mode, the app returns each wallet once when it appears in at least two eligible holder sets but not every eligible holder set.
+9. In all mode, the app returns every eligible holder from every selected contract. Wallets are deduplicated within each contract by Alchemy owner data, but the same wallet appears again when it holds multiple selected contracts.
 
 ## Chain Support
 

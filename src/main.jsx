@@ -15,6 +15,12 @@ const RESULT_MODE_LABELS = {
     empty: 'No uncommon holders found.',
     metric: 'Uncommon holders',
     summary: 'Wallets shared by some collections, but not every selected collection'
+  },
+  all: {
+    action: 'Find all holders',
+    empty: 'No holders found.',
+    metric: 'All holder rows',
+    summary: 'Every eligible holder from each selected collection, including duplicates'
   }
 };
 const CHAINS = [
@@ -172,6 +178,16 @@ function App() {
                 onChange={(event) => setMatchMode(event.target.value)}
               />
               Uncommon
+            </label>
+            <label className={matchMode === 'all' ? 'selected' : ''}>
+              <input
+                type="radio"
+                name="match-mode"
+                value="all"
+                checked={matchMode === 'all'}
+                onChange={(event) => setMatchMode(event.target.value)}
+              />
+              All
             </label>
           </div>
 
@@ -338,7 +354,7 @@ function App() {
                   <tbody>
                     {result.wallets.length > 0 ? (
                       result.wallets.map((wallet, index) => (
-                        <tr key={wallet}>
+                        <tr key={`${wallet}-${index}`}>
                           <td>{index + 1}</td>
                           <td>{wallet}</td>
                         </tr>

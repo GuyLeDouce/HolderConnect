@@ -29,7 +29,7 @@ const CHAIN_CONFIG = {
 
 const CUSTOM_CHAIN_KEY = 'custom';
 const ALCHEMY_NETWORK_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const MATCH_MODES = new Set(['common', 'uncommon']);
+const MATCH_MODES = new Set(['common', 'uncommon', 'all']);
 const OPENSEA_CHAIN_BY_ALCHEMY_KEY = {
   eth: 'ethereum',
   polygon: 'polygon',
@@ -272,11 +272,19 @@ function intersectOwnerSets(ownerSets) {
 }
 
 function getMatchingWallets(ownerSets, mode) {
+  if (mode === 'all') {
+    return allOwnerSets(ownerSets);
+  }
+
   if (mode === 'uncommon') {
     return uncommonOwnerSets(ownerSets);
   }
 
   return intersectOwnerSets(ownerSets);
+}
+
+function allOwnerSets(ownerSets) {
+  return ownerSets.flatMap((ownerSet) => [...ownerSet].sort());
 }
 
 function uncommonOwnerSets(ownerSets) {
