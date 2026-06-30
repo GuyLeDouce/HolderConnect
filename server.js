@@ -207,8 +207,7 @@ async function alchemyJsonRpc({ apiKey, network, method, params }) {
       params
     })
   });
-  const contentType = response.headers.get('content-type') || '';
-  const body = contentType.includes('application/json') ? await response.json() : await response.text();
+  const body = await readResponseBody(response);
 
   if (!response.ok || body?.error) {
     const error = new Error(alchemyErrorMessage(response.status, body));
@@ -217,6 +216,19 @@ async function alchemyJsonRpc({ apiKey, network, method, params }) {
   }
 
   return body.result;
+}
+
+async function readResponseBody(response) {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return text;
+  }
 }
 
 function parseBlockNumber(blockNumber) {
@@ -326,8 +338,7 @@ async function fetchContractPurchases({ apiKey, network, address, fromBlock }) {
     }
 
     const response = await fetch(url);
-    const contentType = response.headers.get('content-type') || '';
-    const body = contentType.includes('application/json') ? await response.json() : await response.text();
+    const body = await readResponseBody(response);
 
     if (!response.ok) {
       const error = new Error(alchemyErrorMessage(response.status, body));
@@ -372,6 +383,10 @@ function alchemyErrorMessage(status, body) {
     return 'Alchemy rate limit reached. Wait a moment and try again.';
   }
 
+  if (typeof body === 'string' && body.trim()) {
+    return body.trim();
+  }
+
   if (body?.message) {
     return body.message;
   }
@@ -398,8 +413,7 @@ async function fetchContractOwners({ apiKey, network, address, includeTokenBalan
     }
 
     const response = await fetch(url);
-    const contentType = response.headers.get('content-type') || '';
-    const body = contentType.includes('application/json') ? await response.json() : await response.text();
+    const body = await readResponseBody(response);
 
     if (!response.ok) {
       const error = new Error(alchemyErrorMessage(response.status, body));
@@ -608,8 +622,7 @@ async function fetchUnderFloorListings({ apiKey, chain, address, minListingPrice
         'x-api-key': apiKey
       }
     });
-    const contentType = response.headers.get('content-type') || '';
-    const body = contentType.includes('application/json') ? await response.json() : await response.text();
+    const body = await readResponseBody(response);
 
     if (!response.ok) {
       const error = new Error(openSeaErrorMessage(response.status, body));
@@ -656,6 +669,10 @@ async function fetchUnderFloorListings({ apiKey, chain, address, minListingPrice
 function openSeaErrorMessage(status, body) {
   if (status === 429) {
     return 'OpenSea rate limit reached while checking listings. Wait a moment and try again.';
+  }
+
+  if (typeof body === 'string' && body.trim()) {
+    return body.trim();
   }
 
   if (body?.errors?.length) {

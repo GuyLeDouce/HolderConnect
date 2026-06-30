@@ -83,6 +83,19 @@ function downloadCsv(content, filename) {
   URL.revokeObjectURL(url);
 }
 
+async function readApiResponse(response) {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return { error: text };
+  }
+}
+
 function App() {
   const [appMode, setAppMode] = useState('holders');
   const [contracts, setContracts] = useState([emptyContract()]);
@@ -144,9 +157,9 @@ function App() {
         })
       });
 
-      const body = await response.json();
+      const body = await readApiResponse(response);
       if (!response.ok) {
-        throw new Error(body.error || 'Holder check failed.');
+        throw new Error(body?.error || 'Holder check failed.');
       }
 
       setResult(body);
@@ -177,9 +190,9 @@ function App() {
         body: JSON.stringify(purchaseLookup)
       });
 
-      const body = await response.json();
+      const body = await readApiResponse(response);
       if (!response.ok) {
-        throw new Error(body.error || 'Purchase lookup failed.');
+        throw new Error(body?.error || 'Purchase lookup failed.');
       }
 
       setPurchaseResult(body);
