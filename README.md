@@ -101,7 +101,7 @@ The server binds to `process.env.PORT`, which is required for Railway.
 1. Select Purchase history in the app.
 2. Enter one NFT contract address, chain, and start time.
 3. The frontend sends the lookup to `/api/contract-purchases`.
-4. The backend converts the start time to a chain block with Alchemy's timestamp lookup.
+4. The backend converts the start time to a chain block by searching block timestamps through Alchemy JSON-RPC.
 5. NFT sale data is fetched from Alchemy's `getNFTSales` endpoint from that block through the latest block.
 6. The result includes one wallet row per purchase. If the same wallet purchased multiple NFTs, it appears multiple times.
 7. CSV export includes wallet, token id, quantity, block number, transaction hash, and marketplace fields.

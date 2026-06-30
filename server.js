@@ -232,22 +232,83 @@ function parseBlockNumber(blockNumber) {
   return Number.NaN;
 }
 
-async function fetchBlockNumberByTimestamp({ apiKey, network, timestampSeconds }) {
-  const result = await alchemyJsonRpc({
+function numberToHex(value) {
+  return `0x${value.toString(16)}`;
+}
+
+function parseBlockTimestamp(block) {
+  const timestamp = block?.timestamp;
+  if (typeof timestamp === 'number' && Number.isInteger(timestamp)) {
+    return timestamp;
+  }
+
+  if (typeof timestamp === 'string') {
+    return Number.parseInt(timestamp, timestamp.startsWith('0x') ? 16 : 10);
+  }
+
+  return Number.NaN;
+}
+
+async function fetchBlockByNumber({ apiKey, network, blockNumber }) {
+  return alchemyJsonRpc({
     apiKey,
     network,
-    method: 'alchemy_getBlockByTimestamp',
-    params: [`0x${timestampSeconds.toString(16)}`, 'after']
+    method: 'eth_getBlockByNumber',
+    params: [numberToHex(blockNumber), false]
   });
-  const blockNumber = parseBlockNumber(result?.number ?? result?.blockNumber ?? result);
+}
 
-  if (!Number.isInteger(blockNumber) || blockNumber < 0) {
-    const error = new Error('Alchemy returned an unexpected block timestamp response.');
+async function fetchBlockNumberByTimestamp({ apiKey, network, timestampSeconds }) {
+  const latestBlockHex = await alchemyJsonRpc({
+    apiKey,
+    network,
+    method: 'eth_blockNumber',
+    params: []
+  });
+  const latestBlockNumber = parseBlockNumber(latestBlockHex);
+
+  if (!Number.isInteger(latestBlockNumber) || latestBlockNumber < 0) {
+    const error = new Error('Alchemy returned an unexpected latest block response.');
     error.status = 502;
     throw error;
   }
 
-  return blockNumber;
+  const latestBlock = await fetchBlockByNumber({ apiKey, network, blockNumber: latestBlockNumber });
+  const latestTimestamp = parseBlockTimestamp(latestBlock);
+  if (!Number.isInteger(latestTimestamp)) {
+    const error = new Error('Alchemy returned an unexpected block response.');
+    error.status = 502;
+    throw error;
+  }
+
+  if (timestampSeconds >= latestTimestamp) {
+    return latestBlockNumber;
+  }
+
+  let low = 0;
+  let high = latestBlockNumber;
+  let matchingBlock = latestBlockNumber;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const block = await fetchBlockByNumber({ apiKey, network, blockNumber: mid });
+    const blockTimestamp = parseBlockTimestamp(block);
+
+    if (!Number.isInteger(blockTimestamp)) {
+      const error = new Error('Alchemy returned an unexpected block response.');
+      error.status = 502;
+      throw error;
+    }
+
+    if (blockTimestamp >= timestampSeconds) {
+      matchingBlock = mid;
+      high = mid - 1;
+    } else {
+      low = mid + 1;
+    }
+  }
+
+  return matchingBlock;
 }
 
 async function fetchContractPurchases({ apiKey, network, address, fromBlock }) {
