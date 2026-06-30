@@ -30,7 +30,6 @@ const CHAIN_CONFIG = {
 const CUSTOM_CHAIN_KEY = 'custom';
 const ALCHEMY_NETWORK_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MATCH_MODES = new Set(['common', 'uncommon', 'all']);
-const NFT_SALE_PAGE_SIZE = 1000;
 const OPENSEA_CHAIN_BY_ALCHEMY_KEY = {
   eth: 'ethereum',
   polygon: 'polygon',
@@ -317,12 +316,11 @@ async function fetchContractPurchases({ apiKey, network, address, fromBlock }) {
   let pageCount = 0;
 
   do {
-    const url = new URL(`https://${network}.g.alchemy.com/nft/v3/${apiKey}/getNFTSales`);
+    const url = new URL(`https://${network}.g.alchemy.com/nft/v2/${apiKey}/getNFTSales`);
     url.searchParams.set('contractAddress', address);
-    url.searchParams.set('fromBlock', String(fromBlock));
+    url.searchParams.set('fromBlock', numberToHex(fromBlock));
     url.searchParams.set('toBlock', 'latest');
     url.searchParams.set('order', 'asc');
-    url.searchParams.set('limit', String(NFT_SALE_PAGE_SIZE));
     if (pageKey) {
       url.searchParams.set('pageKey', pageKey);
     }
