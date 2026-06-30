@@ -131,6 +131,39 @@ h2 {
   grid-template-columns: minmax(340px, 0.95fr) minmax(420px, 1.25fr);
 }
 
+.app-mode-control {
+  background: #ffffff;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 18px;
+  padding: 4px;
+}
+
+.app-mode-control label {
+  align-items: center;
+  border-radius: 6px;
+  color: #445064;
+  cursor: pointer;
+  display: flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 42px;
+}
+
+.app-mode-control label.selected {
+  background: #116149;
+  color: #ffffff;
+}
+
+.app-mode-control input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+
 .checker-form,
 .results {
   background: #ffffff;
@@ -176,6 +209,16 @@ input:focus {
 .contract-list {
   display: grid;
   gap: 12px;
+}
+
+.purchase-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(190px, 1fr) minmax(150px, 0.55fr);
+}
+
+.purchase-address-field {
+  grid-column: 1 / -1;
 }
 
 .mode-control {
@@ -393,6 +436,12 @@ th:first-child {
 
   .contract-row {
     grid-template-columns: 1fr 42px;
+  }
+
+  .app-mode-control,
+  .mode-control,
+  .purchase-grid {
+    grid-template-columns: 1fr;
   }
 
   .address-field,

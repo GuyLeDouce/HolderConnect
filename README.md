@@ -1,12 +1,13 @@
 # HolderConnect
 
-HolderConnect is a Node.js webapp for finding wallets that hold NFTs from the collections you enter. It supports 1 to 20 NFT contract addresses, optional collection labels, per-collection chain selection, common, uncommon, or all holder matching, optional listing floor filters, Alchemy NFT API pagination, CSV export, and clipboard copy.
+HolderConnect is a Node.js webapp for finding wallets that hold NFTs from the collections you enter and for listing wallets that purchased from a contract after a selected time. It supports 1 to 20 NFT contract addresses, optional collection labels, per-collection chain selection, common, uncommon, or all holder matching, optional listing floor filters, Alchemy NFT API pagination, CSV export, and clipboard copy.
 
 ## Stack
 
 - Node.js and Express backend
 - React and Vite frontend
 - Alchemy NFT API holder lookup
+- Alchemy NFT sales lookup
 - ethers.js contract address validation
 - Railway-ready production server
 
@@ -83,6 +84,8 @@ The server binds to `process.env.PORT`, which is required for Railway.
 
 ## How It Works
 
+### Holder Matching
+
 1. The frontend sends each entered contract, label, and chain to `/api/check-holders`.
 2. The backend validates each contract with `ethers.isAddress`.
 3. Holder data is fetched from Alchemy's `getOwnersForContract` NFT API endpoint.
@@ -92,6 +95,16 @@ The server binds to `process.env.PORT`, which is required for Railway.
 7. In common mode, wallets are intersected across every eligible contract holder set.
 8. In uncommon mode, the app returns each wallet once when it appears in at least two eligible holder sets but not every eligible holder set.
 9. In all mode, the app returns every eligible holder from every selected contract. Wallets are deduplicated within each contract by Alchemy owner data, but the same wallet appears again when it holds multiple selected contracts.
+
+### Purchase History
+
+1. Select Purchase history in the app.
+2. Enter one NFT contract address, chain, and start time.
+3. The frontend sends the lookup to `/api/contract-purchases`.
+4. The backend converts the start time to a chain block with Alchemy's timestamp lookup.
+5. NFT sale data is fetched from Alchemy's `getNFTSales` endpoint from that block through the latest block.
+6. The result includes one wallet row per purchase. If the same wallet purchased multiple NFTs, it appears multiple times.
+7. CSV export includes wallet, token id, quantity, block number, transaction hash, and marketplace fields.
 
 ## Chain Support
 

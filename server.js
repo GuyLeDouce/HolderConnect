@@ -30,6 +30,7 @@ const CHAIN_CONFIG = {
 const CUSTOM_CHAIN_KEY = 'custom';
 const ALCHEMY_NETWORK_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MATCH_MODES = new Set(['common', 'uncommon', 'all']);
+const NFT_SALE_PAGE_SIZE = 1000;
 const OPENSEA_CHAIN_BY_ALCHEMY_KEY = {
   eth: 'ethereum',
   polygon: 'polygon',
@@ -120,6 +121,51 @@ function normalizeMatchMode(input) {
   return mode;
 }
 
+function normalizePurchaseLookup(input) {
+  const address = typeof input?.address === 'string' ? input.address.trim() : '';
+  const chain = typeof input?.chain === 'string' ? input.chain.trim() : 'eth';
+  const customNetwork =
+    typeof input?.customNetwork === 'string' ? input.customNetwork.trim().toLowerCase() : '';
+  const startTimeInput = typeof input?.startTime === 'string' ? input.startTime.trim() : '';
+
+  if (!address) {
+    const error = new Error('Enter an NFT contract address.');
+    error.status = 400;
+    throw error;
+  }
+
+  if (!isAddress(address)) {
+    const error = new Error(`Invalid contract address: ${address}`);
+    error.status = 400;
+    throw error;
+  }
+
+  if (!startTimeInput) {
+    const error = new Error('Enter a start time.');
+    error.status = 400;
+    throw error;
+  }
+
+  const startDate = new Date(startTimeInput);
+  if (Number.isNaN(startDate.getTime())) {
+    const error = new Error('Start time must be a valid date and time.');
+    error.status = 400;
+    throw error;
+  }
+
+  if (startDate.getTime() > Date.now()) {
+    const error = new Error('Start time cannot be in the future.');
+    error.status = 400;
+    throw error;
+  }
+
+  return {
+    address: address.toLowerCase(),
+    chain: getChain(chain, customNetwork),
+    startTime: startDate
+  };
+}
+
 function getChain(chain, customNetwork = '') {
   const chainKey = typeof chain === 'string' ? chain : 'eth';
 
@@ -147,6 +193,119 @@ function getChain(chain, customNetwork = '') {
   }
 
   return { key: chainKey, ...CHAIN_CONFIG[chainKey] };
+}
+
+async function alchemyJsonRpc({ apiKey, network, method, params }) {
+  const response = await fetch(`https://${network}.g.alchemy.com/v2/${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method,
+      params
+    })
+  });
+  const contentType = response.headers.get('content-type') || '';
+  const body = contentType.includes('application/json') ? await response.json() : await response.text();
+
+  if (!response.ok || body?.error) {
+    const error = new Error(alchemyErrorMessage(response.status, body));
+    error.status = response.status === 429 ? 429 : 502;
+    throw error;
+  }
+
+  return body.result;
+}
+
+function parseBlockNumber(blockNumber) {
+  if (typeof blockNumber === 'number' && Number.isInteger(blockNumber)) {
+    return blockNumber;
+  }
+
+  if (typeof blockNumber === 'string') {
+    return Number.parseInt(blockNumber, blockNumber.startsWith('0x') ? 16 : 10);
+  }
+
+  return Number.NaN;
+}
+
+async function fetchBlockNumberByTimestamp({ apiKey, network, timestampSeconds }) {
+  const result = await alchemyJsonRpc({
+    apiKey,
+    network,
+    method: 'alchemy_getBlockByTimestamp',
+    params: [`0x${timestampSeconds.toString(16)}`, 'after']
+  });
+  const blockNumber = parseBlockNumber(result?.number ?? result?.blockNumber ?? result);
+
+  if (!Number.isInteger(blockNumber) || blockNumber < 0) {
+    const error = new Error('Alchemy returned an unexpected block timestamp response.');
+    error.status = 502;
+    throw error;
+  }
+
+  return blockNumber;
+}
+
+async function fetchContractPurchases({ apiKey, network, address, fromBlock }) {
+  const purchases = [];
+  let pageKey;
+  let pageCount = 0;
+
+  do {
+    const url = new URL(`https://${network}.g.alchemy.com/nft/v3/${apiKey}/getNFTSales`);
+    url.searchParams.set('contractAddress', address);
+    url.searchParams.set('fromBlock', String(fromBlock));
+    url.searchParams.set('toBlock', 'latest');
+    url.searchParams.set('order', 'asc');
+    url.searchParams.set('limit', String(NFT_SALE_PAGE_SIZE));
+    if (pageKey) {
+      url.searchParams.set('pageKey', pageKey);
+    }
+
+    const response = await fetch(url);
+    const contentType = response.headers.get('content-type') || '';
+    const body = contentType.includes('application/json') ? await response.json() : await response.text();
+
+    if (!response.ok) {
+      const error = new Error(alchemyErrorMessage(response.status, body));
+      error.status = response.status === 429 ? 429 : 502;
+      throw error;
+    }
+
+    const sales = Array.isArray(body?.nftSales)
+      ? body.nftSales
+      : Array.isArray(body?.sales)
+        ? body.sales
+        : [];
+
+    for (const sale of sales) {
+      const buyerAddress = sale?.buyerAddress || sale?.buyer || sale?.taker;
+      if (!isAddress(buyerAddress)) {
+        continue;
+      }
+
+      purchases.push({
+        wallet: buyerAddress.toLowerCase(),
+        tokenId: normalizeTokenId(sale?.tokenId ?? sale?.token?.tokenId ?? sale?.nft?.tokenId),
+        quantity: String(sale?.quantity ?? sale?.amount ?? '1'),
+        blockNumber: parseBlockNumber(sale?.blockNumber),
+        transactionHash: typeof sale?.transactionHash === 'string' ? sale.transactionHash : '',
+        marketplace: typeof sale?.marketplace === 'string' ? sale.marketplace : ''
+      });
+    }
+
+    pageKey = body?.pageKey;
+    pageCount += 1;
+  } while (pageKey);
+
+  return {
+    purchases,
+    pageCount
+  };
 }
 
 function alchemyErrorMessage(status, body) {
@@ -577,6 +736,52 @@ app.post('/api/check-holders', async (req, res, next) => {
       sharedHolderCount: matchedWallets.length,
       matchHolderCount: matchedWallets.length,
       wallets: matchedWallets,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/contract-purchases', async (req, res, next) => {
+  try {
+    const apiKey = process.env.ALCHEMY_API_KEY;
+    if (!apiKey) {
+      const error = new Error('Missing ALCHEMY_API_KEY environment variable.');
+      error.status = 500;
+      throw error;
+    }
+
+    const lookup = normalizePurchaseLookup(req.body);
+    const timestampSeconds = Math.floor(lookup.startTime.getTime() / 1000);
+    const fromBlock = await fetchBlockNumberByTimestamp({
+      apiKey,
+      network: lookup.chain.network,
+      timestampSeconds
+    });
+    const result = await fetchContractPurchases({
+      apiKey,
+      network: lookup.chain.network,
+      address: lookup.address,
+      fromBlock
+    });
+
+    res.json({
+      contract: {
+        address: lookup.address,
+        chain: {
+          key: lookup.chain.key,
+          label: lookup.chain.label,
+          network: lookup.chain.network,
+          isCustom: lookup.chain.isCustom || false
+        }
+      },
+      startTime: lookup.startTime.toISOString(),
+      fromBlock,
+      purchaseCount: result.purchases.length,
+      pagesFetched: result.pageCount,
+      wallets: result.purchases.map((purchase) => purchase.wallet),
+      purchases: result.purchases,
       generatedAt: new Date().toISOString()
     });
   } catch (error) {
