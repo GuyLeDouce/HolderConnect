@@ -30,6 +30,8 @@ const CHAIN_CONFIG = {
 const CUSTOM_CHAIN_KEY = 'custom';
 const ALCHEMY_NETWORK_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MATCH_MODES = new Set(['common', 'uncommon', 'all']);
+const ASSET_TRANSFER_PAGE_SIZE_HEX = '0x3e8';
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const OPENSEA_CHAIN_BY_ALCHEMY_KEY = {
   eth: 'ethereum',
   polygon: 'polygon',
@@ -328,47 +330,33 @@ async function fetchContractPurchases({ apiKey, network, address, fromBlock }) {
   let pageCount = 0;
 
   do {
-    const url = new URL(`https://${network}.g.alchemy.com/nft/v2/${apiKey}/getNFTSales`);
-    url.searchParams.set('contractAddress', address);
-    url.searchParams.set('fromBlock', numberToHex(fromBlock));
-    url.searchParams.set('toBlock', 'latest');
-    url.searchParams.set('order', 'asc');
+    const params = {
+      fromBlock: numberToHex(fromBlock),
+      toBlock: 'latest',
+      contractAddresses: [address],
+      category: ['erc721', 'erc1155'],
+      excludeZeroValue: false,
+      withMetadata: false,
+      maxCount: ASSET_TRANSFER_PAGE_SIZE_HEX,
+      order: 'asc'
+    };
     if (pageKey) {
-      url.searchParams.set('pageKey', pageKey);
+      params.pageKey = pageKey;
     }
 
-    const response = await fetch(url);
-    const body = await readResponseBody(response);
+    const result = await alchemyJsonRpc({
+      apiKey,
+      network,
+      method: 'alchemy_getAssetTransfers',
+      params: [params]
+    });
+    const transfers = Array.isArray(result?.transfers) ? result.transfers : [];
 
-    if (!response.ok) {
-      const error = new Error(alchemyErrorMessage(response.status, body));
-      error.status = response.status === 429 ? 429 : 502;
-      throw error;
+    for (const transfer of transfers) {
+      purchases.push(...normalizeNftTransferRows(transfer));
     }
 
-    const sales = Array.isArray(body?.nftSales)
-      ? body.nftSales
-      : Array.isArray(body?.sales)
-        ? body.sales
-        : [];
-
-    for (const sale of sales) {
-      const buyerAddress = sale?.buyerAddress || sale?.buyer || sale?.taker;
-      if (!isAddress(buyerAddress)) {
-        continue;
-      }
-
-      purchases.push({
-        wallet: buyerAddress.toLowerCase(),
-        tokenId: normalizeTokenId(sale?.tokenId ?? sale?.token?.tokenId ?? sale?.nft?.tokenId),
-        quantity: String(sale?.quantity ?? sale?.amount ?? '1'),
-        blockNumber: parseBlockNumber(sale?.blockNumber),
-        transactionHash: typeof sale?.transactionHash === 'string' ? sale.transactionHash : '',
-        marketplace: typeof sale?.marketplace === 'string' ? sale.marketplace : ''
-      });
-    }
-
-    pageKey = body?.pageKey;
+    pageKey = result?.pageKey;
     pageCount += 1;
   } while (pageKey);
 
@@ -376,6 +364,62 @@ async function fetchContractPurchases({ apiKey, network, address, fromBlock }) {
     purchases,
     pageCount
   };
+}
+
+function normalizeNftTransferRows(transfer) {
+  const toAddress = typeof transfer?.to === 'string' ? transfer.to : '';
+  if (!isAddress(toAddress)) {
+    return [];
+  }
+
+  const fromAddress =
+    typeof transfer?.from === 'string' && isAddress(transfer.from)
+      ? transfer.from.toLowerCase()
+      : '';
+  const wallet = toAddress.toLowerCase();
+  const blockNumber = parseBlockNumber(transfer?.blockNum ?? transfer?.blockNumber);
+  const transactionHash = typeof transfer?.hash === 'string' ? transfer.hash : '';
+  const transferType = fromAddress === ZERO_ADDRESS ? 'mint' : 'transfer';
+
+  if (Array.isArray(transfer?.erc1155Metadata) && transfer.erc1155Metadata.length > 0) {
+    return transfer.erc1155Metadata.map((token) => ({
+      wallet,
+      from: fromAddress,
+      tokenId: normalizeTokenId(token?.tokenId),
+      quantity: normalizeTransferQuantity(token?.value),
+      blockNumber,
+      transactionHash,
+      marketplace: '',
+      transferType
+    }));
+  }
+
+  return [
+    {
+      wallet,
+      from: fromAddress,
+      tokenId: normalizeTokenId(
+        transfer?.erc721TokenId ?? transfer?.tokenId ?? transfer?.rawContract?.tokenId
+      ),
+      quantity: normalizeTransferQuantity(transfer?.value),
+      blockNumber,
+      transactionHash,
+      marketplace: '',
+      transferType
+    }
+  ];
+}
+
+function normalizeTransferQuantity(value) {
+  if (value === undefined || value === null || value === '') {
+    return '1';
+  }
+
+  try {
+    return BigInt(value).toString();
+  } catch (_error) {
+    return String(value);
+  }
 }
 
 function alchemyErrorMessage(status, body) {

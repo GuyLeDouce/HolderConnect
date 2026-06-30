@@ -57,15 +57,16 @@ function walletsToCsv(wallets) {
 
 function purchasesToCsv(purchases) {
   return [
-    ['wallet', 'token_id', 'quantity', 'block_number', 'transaction_hash', 'marketplace'].join(','),
+    ['wallet', 'from', 'token_id', 'quantity', 'block_number', 'transaction_hash', 'type'].join(','),
     ...purchases.map((purchase) =>
       [
         purchase.wallet,
+        purchase.from,
         purchase.tokenId,
         purchase.quantity,
         purchase.blockNumber,
         purchase.transactionHash,
-        purchase.marketplace
+        purchase.transferType
       ]
         .map(csvEscape)
         .join(',')
@@ -218,7 +219,7 @@ function App() {
     if (appMode === 'purchases') {
       downloadCsv(
         purchasesToCsv(purchaseResult?.purchases || []),
-        'holderconnect-purchase-wallets.csv'
+        'holderconnect-acquisition-wallets.csv'
       );
       return;
     }
@@ -270,7 +271,7 @@ function App() {
               setCopyStatus('');
             }}
           />
-          Purchase history
+          Acquisitions
         </label>
       </div>
 
@@ -421,8 +422,8 @@ function App() {
           <form className="checker-form" onSubmit={handlePurchaseSubmit}>
             <div className="form-header">
               <div>
-                <h2>Purchase history</h2>
-                <p>Enter one NFT contract and a start time to list buyers through now.</p>
+                <h2>Acquisitions</h2>
+                <p>Enter one NFT contract and a start time to list receiving wallets through now.</p>
               </div>
             </div>
 
@@ -476,14 +477,14 @@ function App() {
 
             <div className="actions">
               <button className="primary" type="submit" disabled={!canSearchPurchases}>
-                {isLoading ? 'Finding purchases...' : 'Find purchases'}
+                {isLoading ? 'Finding acquisitions...' : 'Find acquisitions'}
               </button>
             </div>
 
             {isLoading && (
               <div className="loading" role="status" aria-live="polite">
                 <span />
-                Fetching NFT sales from Alchemy. Large date ranges may take a while.
+                Fetching NFT transfer events from Alchemy. Large date ranges may take a while.
               </div>
             )}
 
@@ -501,7 +502,7 @@ function App() {
               <h2>Results</h2>
               <p>
                 {appMode === 'purchases' && purchaseResult
-                  ? 'NFT purchase rows from the selected contract.'
+                  ? 'NFT acquisition rows from the selected contract.'
                   : appMode === 'holders' && result
                   ? 'Holder results across selected chains.'
                   : 'Run a check to see wallet addresses.'}
@@ -537,7 +538,7 @@ function App() {
             <>
               <div className="metrics">
                 <div className="metric">
-                  <span>Purchases</span>
+                  <span>Acquisitions</span>
                   <strong>{purchaseResult.purchaseCount.toLocaleString()}</strong>
                   <small>{purchaseResult.contract.chain.label}</small>
                   <small>From block {purchaseResult.fromBlock.toLocaleString()}</small>
@@ -553,6 +554,7 @@ function App() {
                       <th>Wallet address</th>
                       <th>Token</th>
                       <th>Block</th>
+                      <th>Type</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -563,11 +565,12 @@ function App() {
                           <td>{purchase.wallet}</td>
                           <td>{purchase.tokenId || '-'}</td>
                           <td>{Number.isInteger(purchase.blockNumber) ? purchase.blockNumber : '-'}</td>
+                          <td>{purchase.transferType || '-'}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="4">No purchases found.</td>
+                        <td colSpan="5">No acquisitions found.</td>
                       </tr>
                     )}
                   </tbody>
